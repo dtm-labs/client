@@ -39,7 +39,7 @@ func (wf *Workflow) loadProgresses() error {
 				Data:   p.BinData,
 			}
 			if sr.Status == dtmcli.StatusFailed {
-				sr.Error = fmt.Errorf("%s. %w", string(p.BinData), dtmcli.ErrFailure)
+				sr.Error = dtmcli.ErrorMessage2Error(string(p.BinData), dtmcli.ErrFailure)
 			}
 			wf.progresses[p.BranchID+"-"+p.Op] = sr
 		}
@@ -109,7 +109,7 @@ func (wf *Workflow) process(handler WfFunc, data []byte) (err error) {
 		err = wf.processPhase2(err)
 	}
 	if err == nil || errors.Is(err, dtmcli.ErrFailure) {
-		err1 := wf.submit(wfErrorToStatus(err))
+		err1 := wf.submit(err)
 		if err1 != nil {
 			return err1
 		}
@@ -178,7 +178,7 @@ func (wf *Workflow) recordedDoInner(fn func(bb *dtmcli.BranchBarrier) *stepResul
 	}
 	r := wf.getStepResult()
 	if r != nil {
-		logger.Debugf("progress restored: %s %s %v %s %s", branchID, wf.currentOp, r.Error, r.Status, r.Data)
+		logger.Debugf("progress restored: '%s' '%s' '%v' '%s' '%s'", branchID, wf.currentOp, r.Error, r.Status, r.Data)
 		return r
 	}
 	bb := &dtmcli.BranchBarrier{
