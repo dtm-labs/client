@@ -10,8 +10,8 @@ import (
 	context "context"
 
 	"github.com/dtm-labs/client/dtmcli/dtmimp"
-	"github.com/dtm-labs/client/dtmcli/logger"
 	"github.com/dtm-labs/client/dtmgrpc/dtmgpb"
+	"github.com/dtm-labs/logger"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"

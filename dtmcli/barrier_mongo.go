@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/dtm-labs/client/dtmcli/dtmimp"
-	"github.com/dtm-labs/client/dtmcli/logger"
+	"github.com/dtm-labs/logger"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )

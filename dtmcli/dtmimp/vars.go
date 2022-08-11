@@ -8,9 +8,11 @@ package dtmimp
 
 import (
 	"errors"
+	"sync"
+	"time"
 
-	"github.com/dtm-labs/client/dtmcli/logger"
 	"github.com/dtm-labs/dtmdriver"
+	"github.com/dtm-labs/logger"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -30,25 +32,40 @@ var MapSuccess = map[string]interface{}{"dtm_result": ResultSuccess}
 // MapFailure HTTP result of FAILURE
 var MapFailure = map[string]interface{}{"dtm_result": ResultFailure}
 
-// RestyClient the resty object
-var RestyClient = resty.New()
-
 // PassthroughHeaders will be passed to every sub-trans call
 var PassthroughHeaders = []string{}
 
 // BarrierTableName the table name of barrier table
 var BarrierTableName = "dtm_barrier.barrier"
 
+var restyClients sync.Map
+
+// GetRestyClient2 will return a resty client with timeout set
+func GetRestyClient2(timeout time.Duration) *resty.Client {
+	cli, ok := restyClients.Load(timeout)
+	if !ok {
+		client := resty.New()
+		if timeout != 0 {
+			client.SetTimeout(timeout)
+		}
+		AddRestyMiddlewares(client)
+		restyClients.Store(timeout, client)
+		cli = client
+	}
+	return cli.(*resty.Client)
+}
+
 // AddRestyMiddlewares will add the middlewares used by dtm
 func AddRestyMiddlewares(client *resty.Client) {
 	client.OnBeforeRequest(func(c *resty.Client, r *resty.Request) error {
-		logger.Debugf("requesting: %s %s %s resolved: %s", r.Method, r.URL, MustMarshalString(r.Body), r.URL)
+		old := r.URL
 		r.URL = MayReplaceLocalhost(r.URL)
 		ms := dtmdriver.Middlewares.HTTP
 		var err error
 		for i := 0; i < len(ms) && err == nil; i++ {
 			err = ms[i](c, r)
 		}
+		logger.Debugf("requesting: %s %s %s resolved: %s err: %v", r.Method, old, MustMarshalString(r.Body), r.URL, err)
 		return err
 	})
 	client.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
@@ -56,8 +73,4 @@ func AddRestyMiddlewares(client *resty.Client) {
 		logger.Debugf("requested: %d %s %s %s", resp.StatusCode(), r.Method, r.URL, resp.String())
 		return nil
 	})
-}
-
-func init() {
-	AddRestyMiddlewares(RestyClient)
 }
