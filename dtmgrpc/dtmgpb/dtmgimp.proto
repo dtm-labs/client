@@ -13,15 +13,19 @@ service Dtm {
   rpc Abort(DtmRequest) returns (google.protobuf.Empty) {}
   rpc RegisterBranch(DtmBranchRequest) returns (google.protobuf.Empty) {}
   rpc PrepareWorkflow(DtmRequest) returns (DtmProgressesReply) {}
+  rpc Subscribe(DtmTopicRequest) returns (google.protobuf.Empty){}
+  rpc Unsubscribe(DtmTopicRequest) returns (google.protobuf.Empty){}
+  rpc DeleteTopic(DtmTopicRequest) returns (google.protobuf.Empty){}
 }
 
 message DtmTransOptions {
   bool WaitResult = 1;
   int64 TimeoutToFail = 2;
   int64 RetryInterval = 3;
-  repeated string PassthroughHeaders = 4;
+  // repeated string PassthroughHeaders = 4; // depreceated
   map<string, string> BranchHeaders = 5;
   int64 RequestTimeout = 6;
+  int64 RetryLimit = 7;
 }
 
 // DtmRequest request sent to dtm server
@@ -67,4 +71,10 @@ message DtmProgress {
   bytes BinData = 2;
   string BranchID = 3;
   string Op = 4;
+}
+
+message DtmTopicRequest {
+  string Topic = 1;
+  string URL = 2;
+  string Remark = 3;
 }

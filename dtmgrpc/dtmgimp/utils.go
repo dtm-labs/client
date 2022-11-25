@@ -36,12 +36,12 @@ func GetDtmRequest(s *dtmimp.TransBase) *dtmgpb.DtmRequest {
 		Gid:       s.Gid,
 		TransType: s.TransType,
 		TransOptions: &dtmgpb.DtmTransOptions{
-			WaitResult:         s.WaitResult,
-			TimeoutToFail:      s.TimeoutToFail,
-			RetryInterval:      s.RetryInterval,
-			PassthroughHeaders: s.PassthroughHeaders,
-			BranchHeaders:      s.BranchHeaders,
-			RequestTimeout:     s.RequestTimeout,
+			WaitResult:     s.WaitResult,
+			TimeoutToFail:  s.TimeoutToFail,
+			RetryInterval:  s.RetryInterval,
+			BranchHeaders:  s.BranchHeaders,
+			RequestTimeout: s.RequestTimeout,
+			RetryLimit:     s.RetryLimit,
 		},
 		QueryPrepared:  s.QueryPrepared,
 		CustomedData:   s.CustomData,
@@ -61,18 +61,18 @@ const dtmpre string = "dtm-"
 
 // TransInfo2Ctx add trans info to grpc context
 func TransInfo2Ctx(ctx context.Context, gid, transType, branchID, op, dtm string) context.Context {
-	md := metadata.Pairs(
+	nctx := ctx
+	if ctx == nil {
+		nctx = context.Background()
+	}
+	return metadata.AppendToOutgoingContext(
+		nctx,
 		dtmpre+"gid", gid,
 		dtmpre+"trans_type", transType,
 		dtmpre+"branch_id", branchID,
 		dtmpre+"op", op,
 		dtmpre+"dtm", dtm,
 	)
-	nctx := ctx
-	if ctx == nil {
-		nctx = context.Background()
-	}
-	return metadata.NewOutgoingContext(nctx, md)
 }
 
 // Map2Kvs map to metadata kv
