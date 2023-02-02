@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/dtm-labs/logger"
@@ -19,19 +20,19 @@ var defaultFac = workflowFactory{
 	handlers: map[string]*wfItem{},
 }
 
-func (w *workflowFactory) execute(name string, gid string, data []byte) ([]byte, error) {
+func (w *workflowFactory) execute(ctx context.Context, name string, gid string, data []byte) ([]byte, error) {
 	handler := w.handlers[name]
 	if handler == nil {
 		return nil, fmt.Errorf("workflow '%s' not registered. please register at startup", name)
 	}
 	wf := w.newWorkflow(name, gid, data)
 	for _, fn := range handler.custom {
-		fn(wf)
+		fn(ctx, wf)
 	}
 	return wf.process(handler.fn, data)
 }
 
-func (w *workflowFactory) register(name string, handler WfFunc2, custom ...func(wf *Workflow)) error {
+func (w *workflowFactory) register(name string, handler WfFunc2, custom ...func(ctx context.Context, wf *Workflow)) error {
 	e := w.handlers[name]
 	if e != nil {
 		return fmt.Errorf("a handler already exists for %s", name)
