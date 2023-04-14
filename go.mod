@@ -15,3 +15,5 @@ require (
 	github.com/dtm-labs/logger v0.0.1
 	github.com/stretchr/testify v1.8.0 // indirect
 )
+
+retract v1.18.7
