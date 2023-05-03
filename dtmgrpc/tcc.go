@@ -30,12 +30,17 @@ type TccGlobalFunc func(tcc *TccGrpc) error
 // gid global transaction id
 // tccFunc tcc busi func, define the transaction logic
 func TccGlobalTransaction(dtm string, gid string, tccFunc TccGlobalFunc) (rerr error) {
-	return TccGlobalTransaction2(dtm, gid, func(tg *TccGrpc) {}, tccFunc)
+	return TccGlobalTransactionCtx(context.Background(), dtm, gid, func(tg *TccGrpc) {}, tccFunc)
 }
 
 // TccGlobalTransaction2 new version of TccGlobalTransaction
 func TccGlobalTransaction2(dtm string, gid string, custom func(*TccGrpc), tccFunc TccGlobalFunc) (rerr error) {
-	tcc := &TccGrpc{TransBase: *dtmimp.NewTransBase(gid, "tcc", dtm, "")}
+	return TccGlobalTransactionCtx(context.Background(), dtm, gid, custom, tccFunc)
+}
+
+// TccGlobalTransactionCtx new version of TccGlobalTransaction
+func TccGlobalTransactionCtx(ctx context.Context, dtm string, gid string, custom func(*TccGrpc), tccFunc TccGlobalFunc) (rerr error) {
+	tcc := &TccGrpc{TransBase: *dtmimp.NewTransBase(ctx, gid, "tcc", dtm, "")}
 	custom(tcc)
 	rerr = dtmgimp.DtmGrpcCall(&tcc.TransBase, "Prepare")
 	if rerr != nil {
@@ -63,10 +68,14 @@ func TccFromGrpc(ctx context.Context) (*TccGrpc, error) {
 
 // CallBranch call a tcc branch
 func (t *TccGrpc) CallBranch(busiMsg proto.Message, tryURL string, confirmURL string, cancelURL string, reply interface{}, opts ...grpc.CallOption) error {
+	return t.CallBranchCtx(context.Background(), busiMsg, tryURL, confirmURL, cancelURL, reply)
+}
+
+func (t *TccGrpc) CallBranchCtx(ctx context.Context, busiMsg proto.Message, tryURL string, confirmURL string, cancelURL string, reply interface{}, opts ...grpc.CallOption) error {
 	branchID := t.NewSubBranchID()
 	bd, err := proto.Marshal(busiMsg)
 	if err == nil {
-		_, err = dtmgimp.MustGetDtmClient(t.Dtm).RegisterBranch(context.Background(), &dtmgpb.DtmBranchRequest{
+		_, err = dtmgimp.MustGetDtmClient(t.Dtm).RegisterBranch(ctx, &dtmgpb.DtmBranchRequest{
 			Gid:         t.Gid,
 			TransType:   t.TransType,
 			BranchID:    branchID,

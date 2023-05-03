@@ -6,12 +6,16 @@
 
 package dtmimp
 
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+)
 
 // DB inteface of dtmcli db
 type DB interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }
 
 // DBConf defines db config

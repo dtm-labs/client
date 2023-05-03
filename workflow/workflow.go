@@ -123,7 +123,7 @@ type WfPhase2Func func(bb *dtmcli.BranchBarrier) error
 
 // NewRequest return a new resty request, whose progress will be recorded
 func (wf *Workflow) NewRequest() *resty.Request {
-	return wf.restyClient.R().SetContext(wf.Context)
+	return wf.restyClient.R().SetContext(wf.Context).SetHeaderMultiValues(injectTelemetryHttpCtx(wf.Context))
 }
 
 // NewBranch will start a new branch transaction
@@ -204,7 +204,7 @@ func (wf *Workflow) DoXa(dbConf dtmcli.DBConf, fn func(db *sql.DB) ([]byte, erro
 		sr := &stepResult{}
 		wf.TransBase.BranchID = branchID
 		wf.TransBase.Op = sBusi
-		err := dtmimp.XaHandleLocalTrans(wf.TransBase, dbConf, func(d *sql.DB) error {
+		err := dtmimp.XaHandleLocalTrans(wf.Context, wf.TransBase, dbConf, func(d *sql.DB) error {
 			r, e := fn(d)
 			sr.Data = r
 			if e == nil {
@@ -217,7 +217,7 @@ func (wf *Workflow) DoXa(dbConf dtmcli.DBConf, fn func(db *sql.DB) ([]byte, erro
 		return sr
 	})
 	phase2 := func(bb *dtmcli.BranchBarrier) error {
-		return dtmimp.XaHandlePhase2(bb.Gid, dbConf, bb.BranchID, bb.Op)
+		return dtmimp.XaHandlePhase2(wf.Context, bb.Gid, dbConf, bb.BranchID, bb.Op)
 	}
 	wf.succeededOps = append(wf.succeededOps, workflowPhase2Item{
 		branchID: branchID,
@@ -259,5 +259,6 @@ func Interceptor(ctx context.Context, method string, req, reply interface{}, cc 
 		err := origin()
 		return wf.stepResultFromGrpc(reply, err)
 	})
+
 	return wf.stepResultToGrpc(sr, reply)
 }

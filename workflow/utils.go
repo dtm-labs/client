@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"github.com/dtm-labs/client/dtmcli"
 	"github.com/dtm-labs/client/dtmcli/dtmimp"
 	"github.com/dtm-labs/client/dtmgrpc/dtmgimp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -138,4 +141,14 @@ func (wf *Workflow) stepResultToHTTP(s *stepResult) (*http.Response, error) {
 		return nil, s.Error
 	}
 	return newJSONResponse(200, s.Data), nil
+}
+
+// injectTelemetryHttpCtx build open telemetry http header carrier from context
+func injectTelemetryHttpCtx(ctx context.Context) propagation.HeaderCarrier {
+	propagator := otel.GetTextMapPropagator()
+	hc := propagation.HeaderCarrier{}
+	if propagator != nil {
+		propagator.Inject(ctx, hc)
+	}
+	return hc
 }

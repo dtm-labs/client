@@ -7,6 +7,7 @@
 package dtmcli
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/url"
@@ -29,7 +30,11 @@ type Xa struct {
 
 // XaFromQuery construct xa info from request
 func XaFromQuery(qs url.Values) (*Xa, error) {
-	xa := &Xa{TransBase: *dtmimp.TransBaseFromQuery(qs)}
+	return XaFromQueryCtx(context.Background(), qs)
+}
+
+func XaFromQueryCtx(ctx context.Context, qs url.Values) (*Xa, error) {
+	xa := &Xa{TransBase: *dtmimp.TransBaseFromQuery(ctx, qs)}
 	xa.Op = dtmimp.EscapeGet(qs, "op")
 	xa.Phase2URL = dtmimp.EscapeGet(qs, "phase2_url")
 	if xa.Gid == "" || xa.BranchID == "" || xa.Op == "" {
@@ -40,14 +45,18 @@ func XaFromQuery(qs url.Values) (*Xa, error) {
 
 // XaLocalTransaction start a xa local transaction
 func XaLocalTransaction(qs url.Values, dbConf DBConf, xaFunc XaLocalFunc) error {
-	xa, err := XaFromQuery(qs)
+	return XaLocalTransactionCtx(context.Background(), qs, dbConf, xaFunc)
+}
+
+func XaLocalTransactionCtx(ctx context.Context, qs url.Values, dbConf DBConf, xaFunc XaLocalFunc) error {
+	xa, err := XaFromQueryCtx(ctx, qs)
 	if err != nil {
 		return err
 	}
 	if xa.Op == dtmimp.OpCommit || xa.Op == dtmimp.OpRollback {
-		return dtmimp.XaHandlePhase2(xa.Gid, dbConf, xa.BranchID, xa.Op)
+		return dtmimp.XaHandlePhase2(ctx, xa.Gid, dbConf, xa.BranchID, xa.Op)
 	}
-	return dtmimp.XaHandleLocalTrans(&xa.TransBase, dbConf, func(db *sql.DB) error {
+	return dtmimp.XaHandleLocalTrans(ctx, &xa.TransBase, dbConf, func(db *sql.DB) error {
 		err := xaFunc(db, xa)
 		if err != nil {
 			return err
@@ -61,12 +70,16 @@ func XaLocalTransaction(qs url.Values, dbConf DBConf, xaFunc XaLocalFunc) error 
 
 // XaGlobalTransaction start a xa global transaction
 func XaGlobalTransaction(server string, gid string, xaFunc XaGlobalFunc) error {
-	return XaGlobalTransaction2(server, gid, func(x *Xa) {}, xaFunc)
+	return XaGlobalTransactionCtx(context.Background(), server, gid, func(x *Xa) {}, xaFunc)
 }
 
 // XaGlobalTransaction2 start a xa global transaction with xa custom function
 func XaGlobalTransaction2(server string, gid string, custom func(*Xa), xaFunc XaGlobalFunc) (rerr error) {
-	xa := &Xa{TransBase: *dtmimp.NewTransBase(gid, "xa", server, "")}
+	return XaGlobalTransactionCtx(context.Background(), server, gid, custom, xaFunc)
+}
+
+func XaGlobalTransactionCtx(ctx context.Context, server string, gid string, custom func(*Xa), xaFunc XaGlobalFunc) (rerr error) {
+	xa := &Xa{TransBase: *dtmimp.NewTransBase(ctx, gid, "xa", server, "")}
 	custom(xa)
 	return dtmimp.XaHandleGlobalTrans(&xa.TransBase, func(action string) error {
 		return dtmimp.TransCallDtm(&xa.TransBase, action)

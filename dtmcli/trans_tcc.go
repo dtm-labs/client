@@ -7,6 +7,7 @@
 package dtmcli
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 
@@ -27,12 +28,17 @@ type TccGlobalFunc func(tcc *Tcc) (*resty.Response, error)
 // gid global transaction ID
 // tccFunc define the detail tcc busi
 func TccGlobalTransaction(dtm string, gid string, tccFunc TccGlobalFunc) (rerr error) {
-	return TccGlobalTransaction2(dtm, gid, func(t *Tcc) {}, tccFunc)
+	return TccGlobalTransactionCtx(context.Background(), dtm, gid, func(t *Tcc) {}, tccFunc)
 }
 
 // TccGlobalTransaction2 new version of TccGlobalTransaction, add custom param
 func TccGlobalTransaction2(dtm string, gid string, custom func(*Tcc), tccFunc TccGlobalFunc) (rerr error) {
-	tcc := &Tcc{TransBase: *dtmimp.NewTransBase(gid, "tcc", dtm, "")}
+	return TccGlobalTransactionCtx(context.Background(), dtm, gid, custom, tccFunc)
+}
+
+// TccGlobalTransactionCtx add context param, used to Opentelemetry
+func TccGlobalTransactionCtx(ctx context.Context, dtm string, gid string, custom func(*Tcc), tccFunc TccGlobalFunc) (rerr error) {
+	tcc := &Tcc{TransBase: *dtmimp.NewTransBase(ctx, gid, "tcc", dtm, "")}
 	custom(tcc)
 	rerr = dtmimp.TransCallDtm(&tcc.TransBase, "prepare")
 	if rerr != nil {
@@ -52,7 +58,7 @@ func TccGlobalTransaction2(dtm string, gid string, custom func(*Tcc), tccFunc Tc
 
 // TccFromQuery tcc from request info
 func TccFromQuery(qs url.Values) (*Tcc, error) {
-	tcc := &Tcc{TransBase: *dtmimp.TransBaseFromQuery(qs)}
+	tcc := &Tcc{TransBase: *dtmimp.TransBaseFromQuery(context.Background(), qs)}
 	if tcc.Dtm == "" || tcc.Gid == "" {
 		return nil, fmt.Errorf("bad tcc info. dtm: %s, gid: %s parentID: %s", tcc.Dtm, tcc.Gid, tcc.BranchID)
 	}

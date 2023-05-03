@@ -107,7 +107,7 @@ func mdGet(md metadata.MD, key string) string {
 // TransBaseFromGrpc get trans base info from a context metadata
 func TransBaseFromGrpc(ctx context.Context) *dtmimp.TransBase {
 	md, _ := metadata.FromIncomingContext(ctx)
-	tb := dtmimp.NewTransBase(dtmGet(md, "gid"), dtmGet(md, "trans_type"), dtmGet(md, "dtm"), dtmGet(md, "branch_id"))
+	tb := dtmimp.NewTransBase(ctx, dtmGet(md, "gid"), dtmGet(md, "trans_type"), dtmGet(md, "dtm"), dtmGet(md, "branch_id"))
 	tb.Op = dtmGet(md, "op")
 	return tb
 }

@@ -51,14 +51,14 @@ func XaLocalTransaction(ctx context.Context, dbConf dtmcli.DBConf, xaFunc XaGrpc
 		return err
 	}
 	if xa.Op == dtmimp.OpCommit || xa.Op == dtmimp.OpRollback {
-		return dtmimp.XaHandlePhase2(xa.Gid, dbConf, xa.BranchID, xa.Op)
+		return dtmimp.XaHandlePhase2(ctx, xa.Gid, dbConf, xa.BranchID, xa.Op)
 	}
-	return dtmimp.XaHandleLocalTrans(&xa.TransBase, dbConf, func(db *sql.DB) error {
+	return dtmimp.XaHandleLocalTrans(ctx, &xa.TransBase, dbConf, func(db *sql.DB) error {
 		err := xaFunc(db, xa)
 		if err != nil {
 			return err
 		}
-		_, err = dtmgimp.MustGetDtmClient(xa.Dtm).RegisterBranch(context.Background(), &dtmgpb.DtmBranchRequest{
+		_, err = dtmgimp.MustGetDtmClient(xa.Dtm).RegisterBranch(xa.Context, &dtmgpb.DtmBranchRequest{
 			Gid:         xa.Gid,
 			BranchID:    xa.BranchID,
 			TransType:   xa.TransType,
@@ -71,12 +71,16 @@ func XaLocalTransaction(ctx context.Context, dbConf dtmcli.DBConf, xaFunc XaGrpc
 
 // XaGlobalTransaction start a xa global transaction
 func XaGlobalTransaction(server string, gid string, xaFunc XaGrpcGlobalFunc) error {
-	return XaGlobalTransaction2(server, gid, func(xg *XaGrpc) {}, xaFunc)
+	return XaGlobalTransactionCtx(context.Background(), server, gid, func(xg *XaGrpc) {}, xaFunc)
 }
 
 // XaGlobalTransaction2 new version of XaGlobalTransaction. support custom
 func XaGlobalTransaction2(server string, gid string, custom func(*XaGrpc), xaFunc XaGrpcGlobalFunc) error {
-	xa := &XaGrpc{TransBase: *dtmimp.NewTransBase(gid, "xa", server, "")}
+	return XaGlobalTransactionCtx(context.Background(), server, gid, custom, xaFunc)
+}
+
+func XaGlobalTransactionCtx(ctx context.Context, server string, gid string, custom func(*XaGrpc), xaFunc XaGrpcGlobalFunc) error {
+	xa := &XaGrpc{TransBase: *dtmimp.NewTransBase(ctx, gid, "xa", server, "")}
 	custom(xa)
 	dc := dtmgimp.MustGetDtmClient(xa.Dtm)
 	req := dtmgimp.GetDtmRequest(&xa.TransBase)
@@ -86,7 +90,7 @@ func XaGlobalTransaction2(server string, gid string, custom func(*XaGrpc), xaFun
 			"submit":  dc.Submit,
 			"abort":   dc.Abort,
 		}[action]
-		_, err := f(context.Background(), req)
+		_, err := f(ctx, req)
 		return err
 	}, func() error {
 		return xaFunc(xa)

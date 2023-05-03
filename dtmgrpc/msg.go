@@ -7,6 +7,7 @@
 package dtmgrpc
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -26,6 +27,17 @@ type MsgGrpc struct {
 // NewMsgGrpc create new msg
 func NewMsgGrpc(server string, gid string, opts ...TransBaseOption) *MsgGrpc {
 	mg := &MsgGrpc{Msg: *dtmcli.NewMsg(server, gid)}
+
+	for _, opt := range opts {
+		opt(&mg.TransBase)
+	}
+
+	return mg
+}
+
+// NewMsgGrpcCtx create new msg with exist context
+func NewMsgGrpcCtx(ctx context.Context, server string, gid string, opts ...TransBaseOption) *MsgGrpc {
+	mg := &MsgGrpc{Msg: *dtmcli.NewMsgCtx(ctx, server, gid)}
 
 	for _, opt := range opts {
 		opt(&mg.TransBase)
@@ -76,7 +88,7 @@ func (s *MsgGrpc) DoAndSubmitDB(queryPrepared string, db *sql.DB, busiCall dtmcl
 // if busiCall return ErrFailure, then abort is called directly
 // if busiCall return not nil error other than ErrFailure, then DoAndSubmit will call queryPrepared to get the result
 func (s *MsgGrpc) DoAndSubmit(queryPrepared string, busiCall func(bb *dtmcli.BranchBarrier) error, opts ...grpc.CallOption) error {
-	bb, err := dtmcli.BarrierFrom(s.TransType, s.Gid, dtmimp.MsgDoBranch0, dtmimp.MsgDoOp) // a special barrier for msg QueryPrepared
+	bb, err := dtmcli.BarrierFrom(s.Context, s.TransType, s.Gid, dtmimp.MsgDoBranch0, dtmimp.MsgDoOp) // a special barrier for msg QueryPrepared
 	if err == nil {
 		err = s.Prepare(queryPrepared)
 	}

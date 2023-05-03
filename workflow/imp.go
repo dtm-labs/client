@@ -49,7 +49,7 @@ type wfMeta struct{}
 
 func (w *workflowFactory) newWorkflow(ctx context.Context, name string, gid string, data []byte) *Workflow {
 	wf := &Workflow{
-		TransBase: dtmimp.NewTransBase(gid, "workflow", "not inited", ""),
+		TransBase: dtmimp.NewTransBase(ctx, gid, "workflow", "not inited", ""),
 		Name:      name,
 		workflowImp: workflowImp{
 			idGen:        dtmimp.BranchIDGen{},

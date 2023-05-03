@@ -7,6 +7,7 @@
 package dtmcli
 
 import (
+	"context"
 	"github.com/dtm-labs/client/dtmcli/dtmimp"
 )
 
@@ -18,7 +19,12 @@ type Saga struct {
 
 // NewSaga create a saga
 func NewSaga(server string, gid string) *Saga {
-	return &Saga{TransBase: *dtmimp.NewTransBase(gid, "saga", server, ""), orders: map[int][]int{}}
+	return &Saga{TransBase: *dtmimp.NewTransBase(context.Background(), gid, "saga", server, ""), orders: map[int][]int{}}
+}
+
+// NewSagaCtx create a saga with context param
+func NewSagaCtx(ctx context.Context, server string, gid string) *Saga {
+	return &Saga{TransBase: *dtmimp.NewTransBase(ctx, gid, "saga", server, ""), orders: map[int][]int{}}
 }
 
 // Add add a saga step

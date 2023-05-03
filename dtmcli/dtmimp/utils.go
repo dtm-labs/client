@@ -7,6 +7,7 @@
 package dtmimp
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,8 @@ import (
 
 	"github.com/dtm-labs/logger"
 	"github.com/go-resty/resty/v2"
+
+	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 )
 
 // Logf an alias of Infof
@@ -179,20 +182,22 @@ func PooledDB(conf DBConf) (*sql.DB, error) {
 }
 
 // StandaloneDB get a standalone db instance
+// use otelsql create db
 func StandaloneDB(conf DBConf) (*sql.DB, error) {
 	dsn := GetDsn(conf)
 	logger.Infof("opening standalone %s: %s", conf.Driver, strings.Replace(dsn, conf.Password, "****", 1))
-	return sql.Open(conf.Driver, dsn)
+	return otelsql.Open(conf.Driver, dsn)
 }
 
 // XaDB return a standalone db instance for xa
+// use otelsql create db
 func XaDB(conf DBConf) (*sql.DB, error) {
 	dsn := GetDsn(conf)
 	if conf.Driver == DBTypeMysql {
 		dsn += "&autocommit=0"
 	}
 	logger.Infof("opening xa standalone %s: %s", conf.Driver, strings.Replace(dsn, conf.Password, "****", 1))
-	return sql.Open(conf.Driver, dsn)
+	return otelsql.Open(conf.Driver, dsn)
 }
 
 // XaClose will log and close the db
@@ -202,13 +207,13 @@ func XaClose(db *sql.DB) {
 }
 
 // DBExec use raw db to exec
-func DBExec(dbType string, db DB, sql string, values ...interface{}) (affected int64, rerr error) {
+func DBExec(ctx context.Context, dbType string, db DB, sql string, values ...interface{}) (affected int64, rerr error) {
 	if sql == "" {
 		return 0, nil
 	}
 	began := time.Now()
 	sql = GetDBSpecial(dbType).GetPlaceHoldSQL(sql)
-	r, rerr := db.Exec(sql, values...)
+	r, rerr := db.ExecContext(ctx, sql, values...)
 	used := time.Since(began) / time.Millisecond
 	if rerr == nil {
 		affected, rerr = r.RowsAffected()
@@ -278,7 +283,7 @@ func EscapeGet(qs url.Values, key string) string {
 }
 
 // InsertBarrier insert a record to barrier
-func InsertBarrier(tx DB, transType string, gid string, branchID string, op string, barrierID string, reason string, dbType string, barrierTableName string) (int64, error) {
+func InsertBarrier(ctx context.Context, tx DB, transType string, gid string, branchID string, op string, barrierID string, reason string, dbType string, barrierTableName string) (int64, error) {
 	if op == "" {
 		return 0, nil
 	}
@@ -289,5 +294,5 @@ func InsertBarrier(tx DB, transType string, gid string, branchID string, op stri
 		barrierTableName = BarrierTableName
 	}
 	sql := GetDBSpecial(dbType).GetInsertIgnoreTemplate(barrierTableName+"(trans_type, gid, branch_id, op, barrier_id, reason) values(?,?,?,?,?,?)", "uniq_barrier")
-	return DBExec(dbType, tx, sql, transType, gid, branchID, op, barrierID, reason)
+	return DBExec(ctx, dbType, tx, sql, transType, gid, branchID, op, barrierID, reason)
 }

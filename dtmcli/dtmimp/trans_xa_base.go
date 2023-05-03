@@ -7,31 +7,32 @@
 package dtmimp
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 )
 
 // XaHandlePhase2 Handle the callback of commit/rollback
-func XaHandlePhase2(gid string, dbConf DBConf, branchID string, op string) error {
+func XaHandlePhase2(ctx context.Context, gid string, dbConf DBConf, branchID string, op string) error {
 	db, err := PooledDB(dbConf)
 	if err != nil {
 		return err
 	}
 	xaID := gid + "-" + branchID
-	_, err = DBExec(dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL(op, xaID))
+	_, err = DBExec(ctx, dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL(op, xaID))
 	if err != nil &&
 		(strings.Contains(err.Error(), "XAER_NOTA") || strings.Contains(err.Error(), "does not exist")) { // Repeat commit/rollback with the same id, report this error, ignore
 		err = nil
 	}
 	if op == OpRollback && err == nil {
 		// rollback insert a row after prepare. no-error means prepare has finished.
-		_, err = InsertBarrier(db, "xa", gid, branchID, OpAction, XaBarrier1, op, dbConf.Driver, "")
+		_, err = InsertBarrier(ctx, db, "xa", gid, branchID, OpAction, XaBarrier1, op, dbConf.Driver, "")
 	}
 	return err
 }
 
 // XaHandleLocalTrans public handler of LocalTransaction via http/grpc
-func XaHandleLocalTrans(xa *TransBase, dbConf DBConf, cb func(*sql.DB) error) (rerr error) {
+func XaHandleLocalTrans(ctx context.Context, xa *TransBase, dbConf DBConf, cb func(*sql.DB) error) (rerr error) {
 	xaBranch := xa.Gid + "-" + xa.BranchID
 	db, rerr := XaDB(dbConf)
 	if rerr != nil {
@@ -39,21 +40,21 @@ func XaHandleLocalTrans(xa *TransBase, dbConf DBConf, cb func(*sql.DB) error) (r
 	}
 	defer XaClose(db)
 	defer DeferDo(&rerr, func() error {
-		_, err := DBExec(dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL("prepare", xaBranch))
+		_, err := DBExec(ctx, dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL("prepare", xaBranch))
 		return err
 	}, func() error {
-		_, err := DBExec(dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL("abort", xaBranch))
+		_, err := DBExec(ctx, dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL("abort", xaBranch))
 		return err
 	})
-	_, rerr = DBExec(dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL("start", xaBranch))
+	_, rerr = DBExec(ctx, dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL("start", xaBranch))
 	if rerr != nil {
 		return
 	}
 	defer func() {
-		_, _ = DBExec(dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL("end", xaBranch))
+		_, _ = DBExec(ctx, dbConf.Driver, db, GetDBSpecial(dbConf.Driver).GetXaSQL("end", xaBranch))
 	}()
 	// prepare and rollback both insert a row
-	_, rerr = InsertBarrier(db, xa.TransType, xa.Gid, xa.BranchID, OpAction, XaBarrier1, OpAction, dbConf.Driver, "")
+	_, rerr = InsertBarrier(ctx, db, xa.TransType, xa.Gid, xa.BranchID, OpAction, XaBarrier1, OpAction, dbConf.Driver, "")
 	if rerr == nil {
 		rerr = cb(db)
 	}

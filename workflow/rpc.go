@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"context"
 	"encoding/base64"
 
 	"github.com/dtm-labs/client/dtmcli"
@@ -67,7 +66,7 @@ func (wf *Workflow) registerBranch(res []byte, branchID string, op string, statu
 			"status":    status,
 		}, "registerBranch")
 	}
-	_, err := dtmgimp.MustGetDtmClient(wf.Dtm).RegisterBranch(context.Background(), &dtmgpb.DtmBranchRequest{
+	_, err := dtmgimp.MustGetDtmClient(wf.Dtm).RegisterBranch(wf.Context, &dtmgpb.DtmBranchRequest{
 		Gid:         wf.Gid,
 		TransType:   wf.TransType,
 		BranchID:    branchID,

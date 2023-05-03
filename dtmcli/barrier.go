@@ -7,6 +7,7 @@
 package dtmcli
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/url"
@@ -27,6 +28,7 @@ type BranchBarrier struct {
 	BarrierID        int
 	DBType           string // DBTypeMysql | DBTypePostgres
 	BarrierTableName string
+	Ctx              context.Context
 }
 
 func (bb *BranchBarrier) String() string {
@@ -40,16 +42,22 @@ func (bb *BranchBarrier) newBarrierID() string {
 
 // BarrierFromQuery construct transaction info from request
 func BarrierFromQuery(qs url.Values) (*BranchBarrier, error) {
-	return BarrierFrom(dtmimp.EscapeGet(qs, "trans_type"), dtmimp.EscapeGet(qs, "gid"), dtmimp.EscapeGet(qs, "branch_id"), dtmimp.EscapeGet(qs, "op"))
+	return BarrierFrom(context.Background(), dtmimp.EscapeGet(qs, "trans_type"), dtmimp.EscapeGet(qs, "gid"), dtmimp.EscapeGet(qs, "branch_id"), dtmimp.EscapeGet(qs, "op"))
+}
+
+// BarrierFromQueryCtx construct transaction info from request and ctx
+func BarrierFromQueryCtx(ctx context.Context, qs url.Values) (*BranchBarrier, error) {
+	return BarrierFrom(ctx, dtmimp.EscapeGet(qs, "trans_type"), dtmimp.EscapeGet(qs, "gid"), dtmimp.EscapeGet(qs, "branch_id"), dtmimp.EscapeGet(qs, "op"))
 }
 
 // BarrierFrom construct transaction info from request
-func BarrierFrom(transType, gid, branchID, op string) (*BranchBarrier, error) {
+func BarrierFrom(ctx context.Context, transType, gid, branchID, op string) (*BranchBarrier, error) {
 	ti := &BranchBarrier{
 		TransType: transType,
 		Gid:       gid,
 		BranchID:  branchID,
 		Op:        op,
+		Ctx:       ctx,
 	}
 	if ti.TransType == "" || ti.Gid == "" || ti.BranchID == "" || ti.Op == "" {
 		return nil, fmt.Errorf("invalid trans info: %v", ti)
@@ -73,8 +81,8 @@ func (bb *BranchBarrier) Call(tx *sql.Tx, busiCall BarrierBusiFunc) (rerr error)
 		dtmimp.OpRollback:   dtmimp.OpAction, // workflow
 	}[bb.Op]
 
-	originAffected, oerr := dtmimp.InsertBarrier(tx, bb.TransType, bb.Gid, bb.BranchID, originOp, bid, bb.Op, bb.DBType, bb.BarrierTableName)
-	currentAffected, rerr := dtmimp.InsertBarrier(tx, bb.TransType, bb.Gid, bb.BranchID, bb.Op, bid, bb.Op, bb.DBType, bb.BarrierTableName)
+	originAffected, oerr := dtmimp.InsertBarrier(bb.Ctx, tx, bb.TransType, bb.Gid, bb.BranchID, originOp, bid, bb.Op, bb.DBType, bb.BarrierTableName)
+	currentAffected, rerr := dtmimp.InsertBarrier(bb.Ctx, tx, bb.TransType, bb.Gid, bb.BranchID, bb.Op, bid, bb.Op, bb.DBType, bb.BarrierTableName)
 	logger.Debugf("originAffected: %d currentAffected: %d", originAffected, currentAffected)
 
 	if rerr == nil && bb.Op == dtmimp.MsgDoOp && currentAffected == 0 { // for msg's DoAndSubmit, repeated insert should be rejected.
@@ -106,7 +114,7 @@ func (bb *BranchBarrier) CallWithDB(db *sql.DB, busiCall BarrierBusiFunc) error 
 
 // QueryPrepared queries prepared data
 func (bb *BranchBarrier) QueryPrepared(db *sql.DB) error {
-	_, err := dtmimp.InsertBarrier(db, bb.TransType, bb.Gid, dtmimp.MsgDoBranch0, dtmimp.MsgDoOp, dtmimp.MsgDoBarrier1, dtmimp.OpRollback, bb.DBType, bb.BarrierTableName)
+	_, err := dtmimp.InsertBarrier(bb.Ctx, db, bb.TransType, bb.Gid, dtmimp.MsgDoBranch0, dtmimp.MsgDoOp, dtmimp.MsgDoBarrier1, dtmimp.OpRollback, bb.DBType, bb.BarrierTableName)
 	var reason string
 	if err == nil {
 		sql := fmt.Sprintf("select reason from %s where gid=? and branch_id=? and op=? and barrier_id=?", dtmimp.BarrierTableName)

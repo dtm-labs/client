@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // BranchIDGen used to generate a sub branch id
@@ -74,13 +76,13 @@ type TransBase struct {
 }
 
 // NewTransBase new a TransBase
-func NewTransBase(gid string, transType string, dtm string, branchID string) *TransBase {
+func NewTransBase(ctx context.Context, gid string, transType string, dtm string, branchID string) *TransBase {
 	return &TransBase{
 		Gid:         gid,
 		TransType:   transType,
 		BranchIDGen: BranchIDGen{BranchID: branchID},
 		Dtm:         dtm,
-		Context:     context.Background(),
+		Context:     ctx,
 	}
 }
 
@@ -95,8 +97,8 @@ func (t *TransBase) WithRetryLimit(retryLimit int64) {
 }
 
 // TransBaseFromQuery construct transaction info from request
-func TransBaseFromQuery(qs url.Values) *TransBase {
-	return NewTransBase(EscapeGet(qs, "gid"), EscapeGet(qs, "trans_type"), EscapeGet(qs, "dtm"), EscapeGet(qs, "branch_id"))
+func TransBaseFromQuery(ctx context.Context, qs url.Values) *TransBase {
+	return NewTransBase(ctx, EscapeGet(qs, "gid"), EscapeGet(qs, "trans_type"), EscapeGet(qs, "dtm"), EscapeGet(qs, "branch_id"))
 }
 
 // TransCallDtmExt TransBase call dtm
@@ -154,6 +156,7 @@ func TransRequestBranch(t *TransBase, method string, body interface{}, branchID 
 		SetBody(body).
 		SetQueryParams(query).
 		SetHeaders(t.BranchHeaders).
+		SetHeaderMultiValues(injectTelemetryHttpCtx(t.Context)).
 		Execute(method, url)
 	return resp, err
 }
@@ -162,6 +165,7 @@ func transCallDtmJrpc(tb *TransBase, body interface{}, operation string) (*resty
 	rc := GetRestyClient2(time.Duration(tb.RequestTimeout) * time.Second)
 	var result map[string]interface{}
 	resp, err := rc.R().
+		SetHeaderMultiValues(injectTelemetryHttpCtx(tb.Context)).
 		SetBody(map[string]interface{}{
 			"jsonrpc": "2.0",
 			"id":      "no-use",
@@ -177,4 +181,14 @@ func transCallDtmJrpc(tb *TransBase, body interface{}, operation string) (*resty
 		return nil, errors.New(resp.String())
 	}
 	return resp, nil
+}
+
+// injectTelemetryHttpCtx build open telemetry http header carrier from context
+func injectTelemetryHttpCtx(ctx context.Context) propagation.HeaderCarrier {
+	propagator := otel.GetTextMapPropagator()
+	hc := propagation.HeaderCarrier{}
+	if propagator != nil {
+		propagator.Inject(ctx, hc)
+	}
+	return hc
 }
