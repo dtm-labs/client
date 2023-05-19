@@ -3,6 +3,7 @@ module github.com/dtm-labs/client
 go 1.16
 
 require (
+	github.com/cloudwego/kitex v0.4.2
 	github.com/dtm-labs/dtmdriver v0.0.6
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-resty/resty/v2 v2.7.0

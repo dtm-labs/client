@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/cloudwego/kitex/pkg/endpoint"
+	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"net/http"
 	"net/url"
 
@@ -260,4 +262,39 @@ func Interceptor(ctx context.Context, method string, req, reply interface{}, cc 
 		return wf.stepResultFromGrpc(reply, err)
 	})
 	return wf.stepResultToGrpc(sr, reply)
+}
+
+// KitexInterceptor is the middleware for workflow to capture grpc call result
+func KitexInterceptor(next endpoint.Endpoint) endpoint.Endpoint {
+	return func(ctx context.Context, req, resp interface{}) (err error) {
+		ri := rpcinfo.GetRPCInfo(ctx)
+
+		logger.Debugf("Kitex client calling: %s%s %v", ri.To().ServiceName(), ri.To().Method(), dtmimp.MustMarshalString(req))
+		wfVal := ctx.Value(wfMeta{})
+		if wfVal == nil {
+			return next(ctx, req, resp)
+		}
+		wf, _ := wfVal.(*Workflow)
+		origin := func() error {
+			ctx1 := dtmgimp.TransInfo2Ctx(ctx, wf.Gid, wf.TransType, wf.currentBranch, wf.currentOp, wf.Dtm)
+			err := next(ctx1, req, resp)
+			res := fmt.Sprintf("grpc client called: %s%s %s result: %s err: %v",
+				ri.To().ServiceName(), ri.To().Method(), dtmimp.MustMarshalString(req), dtmimp.MustMarshalString(resp), err)
+			if err != nil {
+				logger.Errorf("%s", res)
+			} else {
+				logger.Debugf("%s", res)
+			}
+			return err
+		}
+		if wf.currentOp != dtmimp.OpAction {
+			return origin()
+		}
+		sr := wf.recordedDo(func(bb *dtmcli.BranchBarrier) *stepResult {
+			err := origin()
+			return wf.stepResultFromGrpc(resp, err)
+		})
+		return wf.stepResultToGrpc(sr, resp)
+	}
+
 }
