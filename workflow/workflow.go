@@ -93,6 +93,9 @@ type Options struct {
 	// Default == GrpcError2DtmError: Code Aborted => ErrFailure; Code FailedPrecondition => ErrOngoing
 	GRPCError2DtmError func(error) error
 
+	// Default == KitexError2DtmError： Code Aborted | Code Internal => ErrFailure; Code FailedPrecondition => ErrOngoing
+	KITEXError2DtmError func(error) error
+
 	// This Option specify whether a branch returning ErrFailure should be compensated on rollback.
 	// for most idempotent branches, no compensation is needed.
 	// But for a timeout request, the caller cannot know where the request is successful, so the compensation should be called
@@ -264,7 +267,7 @@ func Interceptor(ctx context.Context, method string, req, reply interface{}, cc 
 	return wf.stepResultToGrpc(sr, reply)
 }
 
-// KitexInterceptor is the middleware for workflow to capture grpc call result
+// KitexInterceptor is the middleware for workflow to capture kitex grpc call result
 func KitexInterceptor(next endpoint.Endpoint) endpoint.Endpoint {
 	return func(ctx context.Context, req, resp interface{}) (err error) {
 		ri := rpcinfo.GetRPCInfo(ctx)
@@ -278,7 +281,7 @@ func KitexInterceptor(next endpoint.Endpoint) endpoint.Endpoint {
 		origin := func() error {
 			ctx1 := dtmgimp.TransInfo2Ctx(ctx, wf.Gid, wf.TransType, wf.currentBranch, wf.currentOp, wf.Dtm)
 			err := next(ctx1, req, resp)
-			res := fmt.Sprintf("grpc client called: %s%s %s result: %s err: %v",
+			res := fmt.Sprintf("Kitex client called: %s%s %s result: %s err: %v",
 				ri.To().ServiceName(), ri.To().Method(), dtmimp.MustMarshalString(req), dtmimp.MustMarshalString(resp), err)
 			if err != nil {
 				logger.Errorf("%s", res)
@@ -292,9 +295,9 @@ func KitexInterceptor(next endpoint.Endpoint) endpoint.Endpoint {
 		}
 		sr := wf.recordedDo(func(bb *dtmcli.BranchBarrier) *stepResult {
 			err := origin()
-			return wf.stepResultFromGrpc(resp, err)
+			return wf.stepResultFromKitex(resp, err)
 		})
-		return wf.stepResultToGrpc(sr, resp)
+		return wf.stepResultToKitex(sr, resp)
 	}
 
 }

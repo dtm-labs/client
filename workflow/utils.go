@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 
+	kitexcodes "github.com/cloudwego/kitex/pkg/remote/trans/nphttp2/codes"
+	kitexstatus "github.com/cloudwego/kitex/pkg/remote/trans/nphttp2/status"
 	"github.com/dtm-labs/client/dtmcli"
 	"github.com/dtm-labs/client/dtmcli/dtmimp"
 	"github.com/dtm-labs/client/dtmgrpc/dtmgimp"
@@ -94,6 +96,17 @@ func GrpcError2DtmError(err error) error {
 	return err
 }
 
+// KitexError2DtmError translate kitex error to dtm error
+func KitexError2DtmError(err error) error {
+	st, _ := kitexstatus.FromError(err)
+	if st != nil && (st.Code() == kitexcodes.Aborted || st.Code() == kitexcodes.Internal) {
+		return dtmcli.ErrorMessage2Error(st.Message(), dtmcli.ErrFailure)
+	} else if st != nil && st.Code() == kitexcodes.FailedPrecondition {
+		return dtmcli.ErrorMessage2Error(st.Message(), dtmcli.ErrOngoing)
+	}
+	return err
+}
+
 func (wf *Workflow) stepResultFromLocal(data []byte, err error) *stepResult {
 	return &stepResult{
 		Error:  err,
@@ -120,6 +133,24 @@ func (wf *Workflow) stepResultFromGrpc(reply interface{}, err error) *stepResult
 func (wf *Workflow) stepResultToGrpc(s *stepResult, reply interface{}) error {
 	if s.Error == nil && s.Status == dtmcli.StatusSucceed {
 		dtmgimp.MustProtoUnmarshal(s.Data, reply.(protoreflect.ProtoMessage))
+	}
+	return s.Error
+}
+
+func (wf *Workflow) stepResultFromKitex(reply interface{}, err error) *stepResult {
+	sr := &stepResult{Error: wf.Options.KITEXError2DtmError(err)}
+	sr.Status = wfErrorToStatus(sr.Error)
+	if sr.Error == nil {
+		sr.Data = dtmimp.MustMarshal(reply)
+	} else if sr.Status == dtmcli.StatusFailed {
+		sr.Data = []byte(err.Error())
+	}
+	return sr
+}
+
+func (wf *Workflow) stepResultToKitex(s *stepResult, reply interface{}) error {
+	if s.Error == nil && s.Status == dtmcli.StatusSucceed {
+		dtmimp.MustUnmarshal(s.Data, &reply)
 	}
 	return s.Error
 }
