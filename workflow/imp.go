@@ -74,6 +74,7 @@ func (w *workflowFactory) newWorkflow(ctx context.Context, name string, gid stri
 	wf.Context = context.WithValue(wf.Context, wfMeta{}, wf)
 	wf.Options.HTTPResp2DtmError = HTTPResp2DtmError
 	wf.Options.GRPCError2DtmError = GrpcError2DtmError
+	wf.Options.KITEXError2DtmError = KitexError2DtmError
 	wf.initRestyClient()
 	return wf
 }
