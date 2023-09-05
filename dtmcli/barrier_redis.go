@@ -1,6 +1,7 @@
 package dtmcli
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,7 +19,7 @@ type KeyAmount struct {
 
 func (bb *BranchBarrier) RedisCheckAdjustBatchAmounts(rd *redis.Client, amounts []*KeyAmount, barrierExpire int) error {
 	if len(amounts) == 0 {
-		return ErrFailure
+		return errors.New("empty amounts")
 	}
 
 	bid := bb.newBarrierID()
