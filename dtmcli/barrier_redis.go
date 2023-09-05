@@ -89,18 +89,15 @@ redis.call('INCRBY', KEYS[%d], ARGV[%d])
 	}
 
 	if err == nil {
-		strv, ok := v.(string)
-		if !ok {
-			return ErrFailure
-		}
+		if strv, _ := v.(string); strv != "" {
+			results := strings.Split(strv, "-")
+			if results[0] == ResultFailure {
+				err = ErrFailure
 
-		results := strings.Split(strv, "-")
-		if results[0] == ResultFailure {
-			err = ErrFailure
-
-			if len(results) > 1 {
-				if idx, _ := strconv.ParseInt(results[1], 0, 64); idx >= 2 {
-					amounts[idx-2].Err = err
+				if len(results) > 1 {
+					if idx, _ := strconv.ParseInt(results[1], 0, 64); idx >= 2 {
+						amounts[idx-2].Err = err
+					}
 				}
 			}
 		}
