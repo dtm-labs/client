@@ -38,8 +38,14 @@ func (bb *BranchBarrier) RedisCheckAdjustBatchAmounts(rd *redis.Client, amounts 
 		values = append(values, v.Amount)
 	}
 
-	script := ` -- RedisCheckAdjustAmount
+	script := ` -- RedisCheckAdjustBatchAmounts
+local opv = redis.call('GET', KEYS[1])
+if opv ~= false then
+	return 'DUPLICATE'
+end
 
+local verrs = {}
+local result = "FAILURE"
 `
 
 	for i := 2; i < len(keys); i++ {
@@ -47,16 +53,18 @@ func (bb *BranchBarrier) RedisCheckAdjustBatchAmounts(rd *redis.Client, amounts 
 		script += fmt.Sprintf(`
 local v%d = redis.call('GET', KEYS[%d])
 if v%d == false or v%d + ARGV[%d] < 0 then
-	return 'FAILURE-%d'
+	verrs[%d] = ""
 end
-
 `, luaIdx, luaIdx, luaIdx, luaIdx, luaIdx, i)
 	}
 
 	script += `
-local opv = redis.call('GET', KEYS[1])
-if opv ~= false then
-	return 'DUPLICATE'
+for i in pairs(verrs) do
+	result = result .. "-" .. i
+end
+
+if result ~= "FAILURE" then
+	return result
 end
 
 redis.call('SET', KEYS[1], 'op', 'EX', ARGV[2])
@@ -94,8 +102,8 @@ redis.call('INCRBY', KEYS[%d], ARGV[%d])
 			if results[0] == ResultFailure {
 				err = ErrFailure
 
-				if len(results) > 1 {
-					if idx, _ := strconv.ParseInt(results[1], 0, 64); idx >= 2 {
+				for i := 1; i < len(results); i++ {
+					if idx, _ := strconv.ParseInt(results[i], 0, 64); idx >= 2 {
 						amounts[idx-2].Err = err
 					}
 				}
